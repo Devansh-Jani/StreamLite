@@ -29,6 +29,7 @@ services:
       VIDEO_DIR: /videos
       CONFIG_DIR: /config
       PORT: 8080
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:80
     volumes:
       - ./videos:/videos:ro
       - ./config:/config

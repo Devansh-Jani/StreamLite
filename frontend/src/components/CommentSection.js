@@ -19,17 +19,34 @@ const CommentSection = ({ comments, onAddComment }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!content.trim()) {
+    
+    const trimmedContent = content.trim();
+    const trimmedAuthor = author.trim();
+    
+    if (!trimmedContent) {
+      return;
+    }
+
+    // Validate content length
+    if (trimmedContent.length > 5000) {
+      alert('Comment is too long. Maximum 5000 characters allowed.');
+      return;
+    }
+
+    // Validate author length
+    if (trimmedAuthor.length > 100) {
+      alert('Name is too long. Maximum 100 characters allowed.');
       return;
     }
 
     setSubmitting(true);
     try {
-      await onAddComment(author || 'Anonymous', content);
+      await onAddComment(trimmedAuthor || 'Anonymous', trimmedContent);
       setContent('');
       setAuthor('');
     } catch (error) {
       console.error('Failed to submit comment:', error);
+      alert('Failed to post comment. Please try again.');
     } finally {
       setSubmitting(false);
     }

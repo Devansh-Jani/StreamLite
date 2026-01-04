@@ -101,8 +101,13 @@ func main() {
 	api.HandleFunc("/videos/{id}/comments", addComment).Methods("POST")
 
 	// Setup CORS
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "http://localhost:3000,http://localhost:80"
+	}
+	
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   strings.Split(allowedOrigins, ","),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"*"},
 		AllowCredentials: true,
@@ -270,8 +275,8 @@ func streamVideo(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	var filepath string
-	err := db.QueryRow("SELECT filepath FROM videos WHERE id = $1", id).Scan(&filepath)
+	var videoPath string
+	err := db.QueryRow("SELECT filepath FROM videos WHERE id = $1", id).Scan(&videoPath)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Video not found", http.StatusNotFound)
 		return
@@ -282,7 +287,7 @@ func streamVideo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Open video file
-	file, err := os.Open(filepath)
+	file, err := os.Open(videoPath)
 	if err != nil {
 		logger.Printf("Error opening video file: %v", err)
 		http.Error(w, "Failed to open video file", http.StatusInternalServerError)
@@ -298,8 +303,28 @@ func streamVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine content type based on file extension
+	ext := strings.ToLower(filepath.Ext(videoPath))
+	contentType := "video/mp4" // default
+	switch ext {
+	case ".mp4", ".m4v":
+		contentType = "video/mp4"
+	case ".webm":
+		contentType = "video/webm"
+	case ".avi":
+		contentType = "video/x-msvideo"
+	case ".mkv":
+		contentType = "video/x-matroska"
+	case ".mov":
+		contentType = "video/quicktime"
+	case ".wmv":
+		contentType = "video/x-ms-wmv"
+	case ".flv":
+		contentType = "video/x-flv"
+	}
+
 	// Set headers for video streaming
-	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Accept-Ranges", "bytes")
 	
 	// Handle range requests for seeking
@@ -415,6 +440,21 @@ func addComment(w http.ResponseWriter, r *http.Request) {
 	var comment Comment
 	if err := json.NewDecoder(r.Body).Decode(&comment); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Sanitize and validate input
+	comment.Author = strings.TrimSpace(comment.Author)
+	comment.Content = strings.TrimSpace(comment.Content)
+	
+	// Limit author name length
+	if len(comment.Author) > 100 {
+		comment.Author = comment.Author[:100]
+	}
+	
+	// Limit content length
+	if len(comment.Content) > 5000 {
+		http.Error(w, "Comment content too long (max 5000 characters)", http.StatusBadRequest)
 		return
 	}
 

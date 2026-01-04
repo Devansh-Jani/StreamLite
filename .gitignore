@@ -50,3 +50,6 @@ Thumbs.db
 # Database
 *.db
 postgres-data/
+
+# Videos directory (user-provided)
+videos/

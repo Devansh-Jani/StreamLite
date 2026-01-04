@@ -117,6 +117,7 @@ npm start
 - `VIDEO_DIR` - Path to video directory (default: `./videos`)
 - `CONFIG_DIR` - Path to config/logs directory (default: `./config`)
 - `PORT` - Server port (default: `8080`)
+- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (default: `http://localhost:3000,http://localhost:80`)
 
 **Frontend:**
 - `REACT_APP_API_URL` - Backend API URL (default: `http://localhost:8080/api`)
