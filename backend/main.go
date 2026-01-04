@@ -56,6 +56,15 @@ var (
 	logger *log.Logger
 )
 
+const (
+	// thumbnailPlaceholderSVG is the default placeholder thumbnail for videos
+	thumbnailPlaceholderSVG = `<svg width="320" height="180" xmlns="http://www.w3.org/2000/svg">
+		<rect width="320" height="180" fill="#1a1a1a"/>
+		<circle cx="160" cy="90" r="30" fill="#404040"/>
+		<polygon points="150,75 150,105 175,90" fill="#ffffff"/>
+	</svg>`
+)
+
 func main() {
 	// Load configuration
 	config = Config{
@@ -96,6 +105,7 @@ func main() {
 	api.HandleFunc("/videos/refresh", refreshVideos).Methods("POST")
 	api.HandleFunc("/videos/{id}", getVideo).Methods("GET")
 	api.HandleFunc("/videos/{id}/stream", streamVideo).Methods("GET")
+	api.HandleFunc("/videos/{id}/thumbnail", getThumbnail).Methods("GET")
 	api.HandleFunc("/videos/{id}/view", incrementView).Methods("POST")
 	api.HandleFunc("/videos/{id}/like", toggleLike).Methods("POST")
 	api.HandleFunc("/videos/{id}/comments", getComments).Methods("GET")
@@ -185,7 +195,10 @@ func scanVideoDirectory() error {
 	addedCount := 0
 	updatedCount := 0
 
-	err := filepath.Walk(config.VideoDir, func(path string, info os.FileInfo, err error) error {
+	// Track visited directories to avoid infinite loops with circular symlinks
+	visitedDirs := make(map[string]bool)
+
+	err := walkWithSymlinks(config.VideoDir, visitedDirs, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			logger.Printf("Error accessing path %s: %v", path, err)
 			return nil // Continue walking
@@ -217,7 +230,7 @@ func scanVideoDirectory() error {
 		var existingModTime time.Time
 		var existingFileSize int64
 		err = db.QueryRow("SELECT id, modified_at, file_size FROM videos WHERE filepath = $1", path).Scan(&existingID, &existingModTime, &existingFileSize)
-		
+
 		if err == sql.ErrNoRows {
 			// New video - insert it
 			filename := info.Name()
@@ -304,6 +317,80 @@ func scanVideoDirectory() error {
 	return nil
 }
 
+// walkWithSymlinks walks the file tree following symbolic links
+func walkWithSymlinks(root string, visitedDirs map[string]bool, walkFn filepath.WalkFunc) error {
+	// Get absolute path to handle symlinks properly
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+
+	// Evaluate symlinks to get the real path
+	realRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		// If we can't resolve the symlink, log and continue with the original path
+		if logger != nil {
+			logger.Printf("Warning: Cannot resolve path %s: %v", absRoot, err)
+		}
+		realRoot = absRoot
+	}
+
+	// Check if we've already visited this directory to avoid infinite loops
+	if visitedDirs[realRoot] {
+		return nil
+	}
+	visitedDirs[realRoot] = true
+
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return walkFn(path, info, err)
+		}
+
+		// If this is a symlink, follow it
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Get the target of the symlink
+			targetPath, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				if logger != nil {
+					logger.Printf("Warning: Cannot resolve symlink %s: %v", path, err)
+				}
+				return nil // Skip this symlink but continue walking
+			}
+
+			// Get info about the target
+			targetInfo, err := os.Stat(targetPath)
+			if err != nil {
+				if logger != nil {
+					logger.Printf("Warning: Cannot stat symlink target %s: %v", targetPath, err)
+				}
+				return nil // Skip this symlink but continue walking
+			}
+
+			// If target is a directory, recursively walk it
+			if targetInfo.IsDir() {
+				if logger != nil {
+					logger.Printf("Following symlink directory: %s -> %s", path, targetPath)
+				}
+				// Walk the symlinked directory but don't return the error,
+				// allowing filepath.Walk to continue with siblings
+				if err := walkWithSymlinks(targetPath, visitedDirs, walkFn); err != nil {
+					if logger != nil {
+						logger.Printf("Warning: Error walking symlinked directory %s: %v", targetPath, err)
+					}
+				}
+				return nil // Continue walking siblings
+			} else {
+				// If target is a file, call walkFn with the original symlink path
+				// but use the target's info
+				return walkFn(path, targetInfo, nil)
+			}
+		}
+
+		// For regular files and directories, use the normal walk function
+		return walkFn(path, info, err)
+	})
+}
+
 func getVideos(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`
 		SELECT id, filename, filepath, title, views, likes, duration, file_size, created_at, modified_at
@@ -335,7 +422,7 @@ func getVideos(w http.ResponseWriter, r *http.Request) {
 
 func refreshVideos(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Refreshing video directory scan")
-	
+
 	if err := scanVideoDirectory(); err != nil {
 		logger.Printf("Error during video refresh: %v", err)
 		http.Error(w, "Failed to refresh videos", http.StatusInternalServerError)
@@ -597,4 +684,42 @@ func addComment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(comment)
+}
+
+func getThumbnail(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var videoPath string
+	err := db.QueryRow("SELECT filepath FROM videos WHERE id = $1", id).Scan(&videoPath)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Video not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		logger.Printf("Error fetching video filepath: %v", err)
+		http.Error(w, "Failed to fetch video", http.StatusInternalServerError)
+		return
+	}
+
+	// Normalize the video path
+	videoPath = filepath.Clean(videoPath)
+
+	// Verify file exists
+	if _, err := os.Stat(videoPath); err != nil {
+		logger.Printf("Video file not found for thumbnail: %s", videoPath)
+		servePlaceholderThumbnail(w)
+		return
+	}
+
+	// Serve placeholder thumbnail
+	// In production, you could generate real thumbnails using ffmpeg
+	servePlaceholderThumbnail(w)
+}
+
+func servePlaceholderThumbnail(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	if _, err := w.Write([]byte(thumbnailPlaceholderSVG)); err != nil {
+		logger.Printf("Error writing placeholder thumbnail: %v", err)
+	}
 }

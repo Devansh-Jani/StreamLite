@@ -127,29 +127,15 @@ const HomePage = () => {
                   onClick={() => handleVideoClick(video.id)}
                 >
                   <CardMedia
-                    component="div"
+                    component="img"
+                    image={video.thumbnail_url}
+                    alt={video.title}
                     sx={{
-                      pt: '56.25%', // 16:9 aspect ratio
+                      height: 180,
+                      objectFit: 'cover',
                       backgroundColor: '#000',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
                     }}
-                  >
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        color: 'white',
-                        fontSize: '3rem',
-                      }}
-                    >
-                      ▶
-                    </Box>
-                  </CardMedia>
+                  />
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Typography gutterBottom variant="h6" component="div" noWrap>
                       {video.title}
