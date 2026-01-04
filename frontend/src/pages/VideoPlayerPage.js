@@ -137,6 +137,28 @@ const VideoPlayerPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleOrientationLock = async () => {
+      if (isFullscreen && screen.orientation && screen.orientation.lock) {
+        try {
+          // Lock to current orientation when entering fullscreen
+          await screen.orientation.lock(screen.orientation.type);
+        } catch (error) {
+          console.log('Orientation lock not supported or failed:', error);
+        }
+      } else if (!isFullscreen && screen.orientation && screen.orientation.unlock) {
+        try {
+          // Unlock orientation when exiting fullscreen
+          screen.orientation.unlock();
+        } catch (error) {
+          console.log('Orientation unlock not supported or failed:', error);
+        }
+      }
+    };
+
+    handleOrientationLock();
+  }, [isFullscreen]);
+
   const handleAddComment = async (author, content) => {
     try {
       const newComment = await addComment(id, author, content);
@@ -188,13 +210,18 @@ const VideoPlayerPage = () => {
       </AppBar>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Paper elevation={3} sx={{ mb: 3 }} ref={containerRef}>
-          <Box sx={{ position: 'relative', backgroundColor: '#000' }}>
+          <Box sx={{ position: 'relative', backgroundColor: '#000', width: '100%', height: isFullscreen ? '100vh' : 'auto' }}>
             <video
               ref={videoRef}
               width="100%"
+              height={isFullscreen ? '100%' : 'auto'}
               controls
               src={getVideoStreamUrl(id)}
-              style={{ display: 'block' }}
+              style={{ 
+                display: 'block',
+                objectFit: 'contain',
+                maxHeight: isFullscreen ? '100vh' : '80vh'
+              }}
             />
             <Box
               sx={{
@@ -221,6 +248,9 @@ const VideoPlayerPage = () => {
                     '.MuiSvgIcon-root': { color: 'white' },
                   }}
                 >
+                  <MenuItem value={0.25}>0.25x</MenuItem>
+                  <MenuItem value={0.5}>0.5x</MenuItem>
+                  <MenuItem value={0.75}>0.75x</MenuItem>
                   <MenuItem value={1}>1x</MenuItem>
                   <MenuItem value={1.25}>1.25x</MenuItem>
                   <MenuItem value={1.5}>1.5x</MenuItem>

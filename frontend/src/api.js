@@ -1,6 +1,23 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8082/api';
+// Dynamically determine API base URL
+// If REACT_APP_API_URL is set, use it
+// Otherwise, use the current host's protocol and hostname with /api path
+const getApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // In production (when served via nginx), use relative path
+  // In development, fall back to localhost
+  if (process.env.NODE_ENV === 'production') {
+    return `${window.location.protocol}//${window.location.host}/api`;
+  }
+  
+  return 'http://localhost:8082/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const getVideos = async () => {
   const response = await axios.get(`${API_BASE_URL}/videos`);

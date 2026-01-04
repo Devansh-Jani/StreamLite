@@ -103,14 +103,14 @@ func main() {
 	// Setup CORS
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:3000,http://localhost:80"
+		allowedOrigins = "*"
 	}
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   strings.Split(allowedOrigins, ","),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"*"},
-		AllowCredentials: true,
+		AllowCredentials: allowedOrigins != "*", // Can't use credentials with wildcard
 	})
 
 	handler := c.Handler(router)
