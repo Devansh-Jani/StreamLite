@@ -11,12 +11,19 @@ import {
   Toolbar,
   Box,
   CircularProgress,
+  IconButton,
+  Tooltip,
+  Snackbar,
+  Alert,
 } from '@mui/material';
-import { getVideos } from '../api';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { getVideos, refreshVideos } from '../api';
 
 const HomePage = () => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,6 +33,7 @@ const HomePage = () => {
         setVideos(data);
       } catch (error) {
         console.error('Failed to fetch videos:', error);
+        setSnackbar({ open: true, message: 'Failed to load videos', severity: 'error' });
       } finally {
         setLoading(false);
       }
@@ -33,6 +41,25 @@ const HomePage = () => {
 
     fetchVideos();
   }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshVideos();
+      const data = await getVideos();
+      setVideos(data);
+      setSnackbar({ open: true, message: 'Videos refreshed successfully', severity: 'success' });
+    } catch (error) {
+      console.error('Failed to refresh videos:', error);
+      setSnackbar({ open: true, message: 'Failed to refresh videos', severity: 'error' });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
 
   const handleVideoClick = (id) => {
     navigate(`/video/${id}`);
@@ -75,6 +102,15 @@ const HomePage = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             StreamLite
           </Typography>
+          <Tooltip title="Refresh videos">
+            <IconButton 
+              color="inherit" 
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? <CircularProgress size={24} color="inherit" /> : <RefreshIcon />}
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -128,6 +164,16 @@ const HomePage = () => {
           </Grid>
         )}
       </Container>
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={4000} 
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 };

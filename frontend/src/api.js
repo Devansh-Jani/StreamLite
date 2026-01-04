@@ -24,6 +24,11 @@ export const getVideos = async () => {
   return response.data;
 };
 
+export const refreshVideos = async () => {
+  const response = await axios.post(`${API_BASE_URL}/videos/refresh`);
+  return response.data;
+};
+
 export const getVideo = async (id) => {
   const response = await axios.get(`${API_BASE_URL}/videos/${id}`);
   return response.data;

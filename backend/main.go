@@ -93,6 +93,7 @@ func main() {
 	// API routes
 	api := router.PathPrefix("/api").Subrouter()
 	api.HandleFunc("/videos", getVideos).Methods("GET")
+	api.HandleFunc("/videos/refresh", refreshVideos).Methods("POST")
 	api.HandleFunc("/videos/{id}", getVideo).Methods("GET")
 	api.HandleFunc("/videos/{id}/stream", streamVideo).Methods("GET")
 	api.HandleFunc("/videos/{id}/view", incrementView).Methods("POST")
@@ -166,7 +167,11 @@ func scanVideoDirectory() error {
 		".m4v":  true,
 	}
 
-	count := 0
+	// Track found files to detect removals
+	foundFiles := make(map[string]bool)
+	addedCount := 0
+	updatedCount := 0
+
 	err := filepath.Walk(config.VideoDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			logger.Printf("Error accessing path %s: %v", path, err)
@@ -182,36 +187,55 @@ func scanVideoDirectory() error {
 			return nil
 		}
 
+		// Mark this file as found
+		foundFiles[path] = true
+
 		// Check if video already exists in database
-		var exists bool
-		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM videos WHERE filepath = $1)", path).Scan(&exists)
-		if err != nil {
+		var existingID int
+		var existingModTime time.Time
+		var existingFileSize int64
+		err = db.QueryRow("SELECT id, modified_at, file_size FROM videos WHERE filepath = $1", path).Scan(&existingID, &existingModTime, &existingFileSize)
+		
+		if err == sql.ErrNoRows {
+			// New video - insert it
+			filename := info.Name()
+			title := strings.TrimSuffix(filename, ext)
+			title = strings.ReplaceAll(title, "_", " ")
+			title = strings.ReplaceAll(title, "-", " ")
+
+			_, err = db.Exec(`
+				INSERT INTO videos (filename, filepath, title, file_size, modified_at)
+				VALUES ($1, $2, $3, $4, $5)
+			`, filename, path, title, info.Size(), info.ModTime())
+
+			if err != nil {
+				logger.Printf("Error inserting video %s: %v", filename, err)
+				return nil
+			}
+
+			addedCount++
+			logger.Printf("Added new video: %s", filename)
+		} else if err != nil {
 			logger.Printf("Error checking video existence: %v", err)
 			return nil
+		} else {
+			// Video exists - check if metadata needs updating
+			if info.ModTime().After(existingModTime) || info.Size() != existingFileSize {
+				_, err = db.Exec(`
+					UPDATE videos 
+					SET file_size = $1, modified_at = $2
+					WHERE id = $3
+				`, info.Size(), info.ModTime(), existingID)
+
+				if err != nil {
+					logger.Printf("Error updating video metadata: %v", err)
+				} else {
+					updatedCount++
+					logger.Printf("Updated metadata for video ID %d", existingID)
+				}
+			}
 		}
 
-		if exists {
-			return nil
-		}
-
-		// Generate title from filename
-		filename := info.Name()
-		title := strings.TrimSuffix(filename, ext)
-		title = strings.ReplaceAll(title, "_", " ")
-		title = strings.ReplaceAll(title, "-", " ")
-
-		// Insert video into database
-		_, err = db.Exec(`
-			INSERT INTO videos (filename, filepath, title, file_size, modified_at)
-			VALUES ($1, $2, $3, $4, $5)
-		`, filename, path, title, info.Size(), info.ModTime())
-
-		if err != nil {
-			logger.Printf("Error inserting video %s: %v", filename, err)
-			return nil
-		}
-
-		count++
 		return nil
 	})
 
@@ -219,7 +243,42 @@ func scanVideoDirectory() error {
 		return err
 	}
 
-	logger.Printf("Scanned video directory: found %d new videos", count)
+	// Remove videos from database that no longer exist in filesystem
+	// Only perform cleanup if we found at least some files (avoid cleanup on scan errors)
+	if len(foundFiles) > 0 {
+		rows, err := db.Query("SELECT id, filepath, filename FROM videos")
+		if err != nil {
+			logger.Printf("Error querying videos for cleanup: %v", err)
+		} else {
+			defer rows.Close()
+			removedCount := 0
+
+			for rows.Next() {
+				var id int
+				var filepath, filename string
+				if err := rows.Scan(&id, &filepath, &filename); err != nil {
+					logger.Printf("Error scanning video row: %v", err)
+					continue
+				}
+
+				if !foundFiles[filepath] {
+					// File no longer exists - remove from database
+					_, err = db.Exec("DELETE FROM videos WHERE id = $1", id)
+					if err != nil {
+						logger.Printf("Error removing video %s: %v", filename, err)
+					} else {
+						removedCount++
+						logger.Printf("Removed deleted video: %s", filename)
+					}
+				}
+			}
+
+			logger.Printf("Scan complete: %d added, %d updated, %d removed", addedCount, updatedCount, removedCount)
+		}
+	} else {
+		logger.Printf("Scan complete: %d added, %d updated (no cleanup performed - no files found)", addedCount, updatedCount)
+	}
+
 	return nil
 }
 
@@ -250,6 +309,19 @@ func getVideos(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(videos)
+}
+
+func refreshVideos(w http.ResponseWriter, r *http.Request) {
+	logger.Println("Refreshing video directory scan")
+	
+	if err := scanVideoDirectory(); err != nil {
+		logger.Printf("Error during video refresh: %v", err)
+		http.Error(w, "Failed to refresh videos", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Videos refreshed successfully"})
 }
 
 func getVideo(w http.ResponseWriter, r *http.Request) {
