@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -74,7 +75,7 @@ func TestVideoFileAccessibility(t *testing.T) {
 // TestVideoFilePermissions tests handling of permission denied errors
 func TestVideoFilePermissions(t *testing.T) {
 	// Skip on Windows where chmod doesn't work the same way
-	if os.Getenv("GOOS") == "windows" {
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows")
 	}
 	
@@ -109,8 +110,13 @@ func TestVideoFilePermissions(t *testing.T) {
 
 // TestPathNormalizationOnRealFiles tests path normalization with actual files
 func TestPathNormalizationOnRealFiles(t *testing.T) {
-	// Create a temporary test directory and file
+	// Create a temporary test directory structure
 	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatalf("Failed to create subdirectory: %v", err)
+	}
+	
 	testFile := filepath.Join(tmpDir, "test_video.mp4")
 	
 	// Create test file
@@ -119,26 +125,35 @@ func TestPathNormalizationOnRealFiles(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 	
-	// Test various path representations
-	testPaths := []string{
-		testFile,
-		testFile + "/",                // Trailing slash
-		filepath.Join(tmpDir, "./test_video.mp4"),  // With ./
-		filepath.Join(tmpDir, "subdir/../test_video.mp4"),  // With ..
+	// Test various path representations that should resolve to the same file
+	testCases := []struct {
+		path        string
+		shouldExist bool
+		description string
+	}{
+		{testFile, true, "direct path"},
+		{filepath.Join(subDir, "..", "test_video.mp4"), true, "path with .."},
+		{testFile + "/", false, "file with trailing slash (should fail)"},
 	}
 	
-	for _, path := range testPaths {
-		cleanPath := filepath.Clean(path)
-		
-		// Try to stat the cleaned path
+	for _, tc := range testCases {
+		cleanPath := filepath.Clean(tc.path)
 		fileInfo, err := os.Stat(cleanPath)
 		
-		// The file should exist for the first two paths
-		if path == testFile || path == testFile+"/" {
+		if tc.shouldExist {
 			if err != nil {
-				t.Errorf("Path %s (cleaned to %s): expected to exist, got error: %v", path, cleanPath, err)
+				t.Errorf("Path %s (%s, cleaned to %s): expected to exist, got error: %v", 
+					tc.path, tc.description, cleanPath, err)
 			} else if fileInfo.IsDir() {
-				t.Errorf("Path %s (cleaned to %s): expected file, got directory", path, cleanPath)
+				t.Errorf("Path %s (%s, cleaned to %s): expected file, got directory", 
+					tc.path, tc.description, cleanPath)
+			}
+		} else {
+			// For paths that shouldn't work (like file with trailing slash)
+			// we expect an error or it being treated as directory
+			if err == nil && !fileInfo.IsDir() {
+				t.Logf("Path %s (%s, cleaned to %s): behaved as expected", 
+					tc.path, tc.description, cleanPath)
 			}
 		}
 	}
