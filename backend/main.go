@@ -230,7 +230,7 @@ func scanVideoDirectory() error {
 		var existingModTime time.Time
 		var existingFileSize int64
 		err = db.QueryRow("SELECT id, modified_at, file_size FROM videos WHERE filepath = $1", path).Scan(&existingID, &existingModTime, &existingFileSize)
-		
+
 		if err == sql.ErrNoRows {
 			// New video - insert it
 			filename := info.Name()
@@ -422,7 +422,7 @@ func getVideos(w http.ResponseWriter, r *http.Request) {
 
 func refreshVideos(w http.ResponseWriter, r *http.Request) {
 	logger.Println("Refreshing video directory scan")
-	
+
 	if err := scanVideoDirectory(); err != nil {
 		logger.Printf("Error during video refresh: %v", err)
 		http.Error(w, "Failed to refresh videos", http.StatusInternalServerError)
