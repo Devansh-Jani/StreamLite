@@ -139,17 +139,17 @@ const VideoPlayerPage = () => {
 
   useEffect(() => {
     const handleOrientationLock = async () => {
-      if (isFullscreen && screen.orientation && screen.orientation.lock) {
+      if (isFullscreen && window.screen.orientation && window.screen.orientation.lock) {
         try {
           // Lock to current orientation when entering fullscreen
-          await screen.orientation.lock(screen.orientation.type);
+          await window.screen.orientation.lock(window.screen.orientation.type);
         } catch (error) {
           console.log('Orientation lock not supported or failed:', error);
         }
-      } else if (!isFullscreen && screen.orientation && screen.orientation.unlock) {
+      } else if (!isFullscreen && window.screen.orientation && window.screen.orientation.unlock) {
         try {
           // Unlock orientation when exiting fullscreen
-          screen.orientation.unlock();
+          window.screen.orientation.unlock();
         } catch (error) {
           console.log('Orientation unlock not supported or failed:', error);
         }
