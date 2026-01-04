@@ -184,6 +184,61 @@ StreamLite is optimized for low-resource hardware:
 - Containerized deployment for easy management
 - Read-only video access for safety
 
+## Troubleshooting
+
+### "Failed to load videos" on Linux
+
+If you see "Failed to load videos" when running on a Linux server but the application works on Windows, check the following:
+
+1. **File Permissions**: Ensure the video directory and files are readable by the user running the backend
+   ```bash
+   # Check permissions
+   ls -la videos/
+   
+   # Fix if needed (adjust permissions as appropriate)
+   chmod -R 755 videos/
+   ```
+
+2. **Video Directory Path**: Verify the `VIDEO_DIR` environment variable points to the correct directory
+   ```bash
+   # In docker-compose.yml or when running locally
+   VIDEO_DIR=/videos  # or your actual path
+   ```
+
+3. **Case Sensitivity**: Linux filesystems are case-sensitive. Ensure your video filenames and paths match exactly
+   - The application normalizes paths automatically
+   - File extensions are handled case-insensitively (.MP4, .mp4, .Mp4 all work)
+
+4. **Check Logs**: Review the backend logs for detailed error messages
+   ```bash
+   # If using Docker
+   docker logs streamlite-backend
+   
+   # Log file location
+   cat config/streamlite.log
+   ```
+
+### Common Error Messages
+
+- **"Video directory does not exist"**: Create the videos directory or update the `VIDEO_DIR` path
+- **"Permission denied accessing video directory"**: Fix file permissions (see above)
+- **"Video file not found"**: The file was deleted or moved after being added to the database
+- **"Permission denied accessing video file"**: The file is not readable by the backend user
+
+### Testing the Setup
+
+After deployment, you can verify everything works:
+
+1. Check backend health:
+   ```bash
+   curl http://localhost:8082/api/videos
+   ```
+
+2. Manually trigger a video refresh:
+   ```bash
+   curl -X POST http://localhost:8082/api/videos/refresh
+   ```
+
 ## License
 
 MIT License - see LICENSE file for details

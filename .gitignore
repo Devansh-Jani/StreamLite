@@ -54,3 +54,6 @@ postgres-data/
 
 # Videos directory (user-provided)
 videos/
+
+# Config directory (user-provided)
+config/

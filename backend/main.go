@@ -156,6 +156,19 @@ func getEnv(key, defaultValue string) string {
 func scanVideoDirectory() error {
 	logger.Printf("Scanning video directory: %s", config.VideoDir)
 
+	// Verify video directory exists and is accessible
+	if _, err := os.Stat(config.VideoDir); err != nil {
+		if os.IsNotExist(err) {
+			logger.Printf("Video directory does not exist: %s", config.VideoDir)
+			return fmt.Errorf("video directory does not exist: %s", config.VideoDir)
+		} else if os.IsPermission(err) {
+			logger.Printf("Permission denied accessing video directory: %s", config.VideoDir)
+			return fmt.Errorf("permission denied accessing video directory: %s", config.VideoDir)
+		}
+		logger.Printf("Error accessing video directory %s: %v", config.VideoDir, err)
+		return fmt.Errorf("error accessing video directory: %w", err)
+	}
+
 	videoExtensions := map[string]bool{
 		".mp4":  true,
 		".avi":  true,
@@ -184,6 +197,15 @@ func scanVideoDirectory() error {
 
 		ext := strings.ToLower(filepath.Ext(info.Name()))
 		if !videoExtensions[ext] {
+			return nil
+		}
+
+		// Normalize the path for cross-platform compatibility
+		path = filepath.Clean(path)
+
+		// Verify file is readable before adding to database
+		if _, err := os.Stat(path); err != nil {
+			logger.Printf("Warning: Cannot access video file %s: %v", path, err)
 			return nil
 		}
 
@@ -365,22 +387,36 @@ func streamVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize the video path for cross-platform compatibility
+	videoPath = filepath.Clean(videoPath)
+
+	// Verify file exists and is accessible
+	fileInfo, err := os.Stat(videoPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Printf("Video file not found: %s", videoPath)
+			http.Error(w, "Video file not found", http.StatusNotFound)
+		} else if os.IsPermission(err) {
+			logger.Printf("Permission denied accessing video file: %s", videoPath)
+			http.Error(w, "Permission denied accessing video file", http.StatusForbidden)
+		} else {
+			logger.Printf("Error accessing video file %s: %v", videoPath, err)
+			http.Error(w, "Failed to access video file", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	// Open video file
 	file, err := os.Open(videoPath)
 	if err != nil {
-		logger.Printf("Error opening video file: %v", err)
+		logger.Printf("Error opening video file %s: %v", videoPath, err)
 		http.Error(w, "Failed to open video file", http.StatusInternalServerError)
 		return
 	}
 	defer file.Close()
 
-	// Get file info
-	fileInfo, err := file.Stat()
-	if err != nil {
-		logger.Printf("Error getting file info: %v", err)
-		http.Error(w, "Failed to get file info", http.StatusInternalServerError)
-		return
-	}
+	// Get file info (already obtained from os.Stat above)
+	// fileInfo is used below for content-length and range handling
 
 	// Determine content type based on file extension
 	ext := strings.ToLower(filepath.Ext(videoPath))

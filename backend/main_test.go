@@ -101,3 +101,59 @@ func TestFoundFilesTracking(t *testing.T) {
 		t.Errorf("Expected to remove /videos/test3.avi, got %s", toRemove[0])
 	}
 }
+
+// TestPathNormalization verifies that paths are normalized for cross-platform compatibility
+func TestPathNormalization(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"./videos/test.mp4", "videos/test.mp4"},
+		{"videos//test.mp4", "videos/test.mp4"},
+		{"videos/./test.mp4", "videos/test.mp4"},
+		{"videos/../videos/test.mp4", "videos/test.mp4"},
+	}
+
+	for _, tc := range testCases {
+		result := filepath.Clean(tc.input)
+		if result != tc.expected {
+			t.Errorf("Path %s: expected %s, got %s", tc.input, tc.expected, result)
+		}
+	}
+}
+
+// TestFileExtensionCaseSensitivity verifies extension handling is case-insensitive
+func TestFileExtensionCaseSensitivity(t *testing.T) {
+	videoExtensions := map[string]bool{
+		".mp4":  true,
+		".avi":  true,
+		".mkv":  true,
+		".mov":  true,
+		".wmv":  true,
+		".flv":  true,
+		".webm": true,
+		".m4v":  true,
+	}
+
+	testCases := []struct {
+		filename string
+		expected bool
+	}{
+		{"video.MP4", true},
+		{"video.Mp4", true},
+		{"video.mP4", true},
+		{"video.AVI", true},
+		{"video.MKV", true},
+		{"VIDEO.MP4", true},
+		{"video.TXT", false},
+		{"video.JPG", false},
+	}
+
+	for _, tc := range testCases {
+		ext := strings.ToLower(filepath.Ext(tc.filename))
+		result := videoExtensions[ext]
+		if result != tc.expected {
+			t.Errorf("File %s: expected %v, got %v", tc.filename, tc.expected, result)
+		}
+	}
+}
