@@ -244,34 +244,39 @@ func scanVideoDirectory() error {
 	}
 
 	// Remove videos from database that no longer exist in filesystem
-	rows, err := db.Query("SELECT id, filepath, filename FROM videos")
-	if err != nil {
-		logger.Printf("Error querying videos for cleanup: %v", err)
-	} else {
-		defer rows.Close()
-		removedCount := 0
+	// Only perform cleanup if we found at least some files (avoid cleanup on scan errors)
+	if len(foundFiles) > 0 {
+		rows, err := db.Query("SELECT id, filepath, filename FROM videos")
+		if err != nil {
+			logger.Printf("Error querying videos for cleanup: %v", err)
+		} else {
+			defer rows.Close()
+			removedCount := 0
 
-		for rows.Next() {
-			var id int
-			var filepath, filename string
-			if err := rows.Scan(&id, &filepath, &filename); err != nil {
-				logger.Printf("Error scanning video row: %v", err)
-				continue
-			}
+			for rows.Next() {
+				var id int
+				var filepath, filename string
+				if err := rows.Scan(&id, &filepath, &filename); err != nil {
+					logger.Printf("Error scanning video row: %v", err)
+					continue
+				}
 
-			if !foundFiles[filepath] {
-				// File no longer exists - remove from database
-				_, err = db.Exec("DELETE FROM videos WHERE id = $1", id)
-				if err != nil {
-					logger.Printf("Error removing video %s: %v", filename, err)
-				} else {
-					removedCount++
-					logger.Printf("Removed deleted video: %s", filename)
+				if !foundFiles[filepath] {
+					// File no longer exists - remove from database
+					_, err = db.Exec("DELETE FROM videos WHERE id = $1", id)
+					if err != nil {
+						logger.Printf("Error removing video %s: %v", filename, err)
+					} else {
+						removedCount++
+						logger.Printf("Removed deleted video: %s", filename)
+					}
 				}
 			}
-		}
 
-		logger.Printf("Scan complete: %d added, %d updated, %d removed", addedCount, updatedCount, removedCount)
+			logger.Printf("Scan complete: %d added, %d updated, %d removed", addedCount, updatedCount, removedCount)
+		}
+	} else {
+		logger.Printf("Scan complete: %d added, %d updated (no cleanup performed - no files found)", addedCount, updatedCount)
 	}
 
 	return nil

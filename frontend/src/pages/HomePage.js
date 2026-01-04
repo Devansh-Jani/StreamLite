@@ -33,6 +33,7 @@ const HomePage = () => {
         setVideos(data);
       } catch (error) {
         console.error('Failed to fetch videos:', error);
+        setSnackbar({ open: true, message: 'Failed to load videos', severity: 'error' });
       } finally {
         setLoading(false);
       }
