@@ -746,14 +746,18 @@ func normalizePlaylistName(filename string) string {
 	
 	// Remove patterns using simple string operations
 	for _, pattern := range []string{
-		"_v1", "_v2", "_v3", "_v4", "_v5", "_edited", "_final", "_draft",
-		" v1", " v2", " v3", " v4", " v5", " edited", " final", " draft",
-		"(edited)", "(final)", "(draft)", "-edited", "-final", "-draft",
+		"_v1", "_v2", "_v3", "_v4", "_v5", "_v6", "_v7", "_v8", "_v9",
+		" v1", " v2", " v3", " v4", " v5", " v6", " v7", " v8", " v9",
+		"-v1", "-v2", "-v3", "-v4", "-v5", "-v6", "-v7", "-v8", "-v9",
+		"_edited", "_final", "_draft",
+		" edited", " final", " draft",
+		"-edited", "-final", "-draft",
+		"(edited)", "(final)", "(draft)",
 	} {
 		name = strings.TrimSuffix(name, pattern)
 	}
 	
-	// Remove trailing numbers
+	// Remove trailing numbers (e.g., _1, _2, -1, -2, etc.)
 	for i := len(name) - 1; i >= 0; i-- {
 		if name[i] >= '0' && name[i] <= '9' {
 			continue
