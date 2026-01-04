@@ -56,6 +56,15 @@ var (
 	logger *log.Logger
 )
 
+const (
+	// thumbnailPlaceholderSVG is the default placeholder thumbnail for videos
+	thumbnailPlaceholderSVG = `<svg width="320" height="180" xmlns="http://www.w3.org/2000/svg">
+		<rect width="320" height="180" fill="#1a1a1a"/>
+		<circle cx="160" cy="90" r="30" fill="#404040"/>
+		<polygon points="150,75 150,105 175,90" fill="#ffffff"/>
+	</svg>`
+)
+
 func main() {
 	// Load configuration
 	config = Config{
@@ -319,7 +328,9 @@ func walkWithSymlinks(root string, visitedDirs map[string]bool, walkFn filepath.
 	// Evaluate symlinks to get the real path
 	realRoot, err := filepath.EvalSymlinks(absRoot)
 	if err != nil {
-		return err
+		// If we can't resolve the symlink, log and continue with the original path
+		logger.Printf("Warning: Cannot resolve path %s: %v", absRoot, err)
+		realRoot = absRoot
 	}
 
 	// Check if we've already visited this directory to avoid infinite loops
@@ -691,15 +702,7 @@ func getThumbnail(w http.ResponseWriter, r *http.Request) {
 }
 
 func servePlaceholderThumbnail(w http.ResponseWriter) {
-	// Generate a simple placeholder image (320x180 gray rectangle with play icon)
-	// Return a minimal SVG placeholder
-	placeholder := `<svg width="320" height="180" xmlns="http://www.w3.org/2000/svg">
-		<rect width="320" height="180" fill="#1a1a1a"/>
-		<circle cx="160" cy="90" r="30" fill="#404040"/>
-		<polygon points="150,75 150,105 175,90" fill="#ffffff"/>
-	</svg>`
-	
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.Write([]byte(placeholder))
+	w.Write([]byte(thumbnailPlaceholderSVG))
 }
