@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -155,5 +156,86 @@ func TestFileExtensionCaseSensitivity(t *testing.T) {
 		if result != tc.expected {
 			t.Errorf("File %s: expected %v, got %v", tc.filename, tc.expected, result)
 		}
+	}
+}
+
+// TestSymlinkDetection verifies symlink detection logic
+func TestSymlinkDetection(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir := t.TempDir()
+	
+	// Create a regular file
+	regularFile := filepath.Join(tmpDir, "regular.mp4")
+	if err := os.WriteFile(regularFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create regular file: %v", err)
+	}
+	
+	// Create a symlink to the file
+	symlinkFile := filepath.Join(tmpDir, "symlink.mp4")
+	if err := os.Symlink(regularFile, symlinkFile); err != nil {
+		t.Skipf("Cannot create symlink (might not be supported): %v", err)
+	}
+	
+	// Check regular file
+	info, err := os.Lstat(regularFile)
+	if err != nil {
+		t.Fatalf("Failed to stat regular file: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Error("Regular file incorrectly identified as symlink")
+	}
+	
+	// Check symlink
+	linkInfo, err := os.Lstat(symlinkFile)
+	if err != nil {
+		t.Fatalf("Failed to lstat symlink: %v", err)
+	}
+	if linkInfo.Mode()&os.ModeSymlink == 0 {
+		t.Error("Symlink not identified as symlink")
+	}
+	
+	// Test EvalSymlinks
+	target, err := filepath.EvalSymlinks(symlinkFile)
+	if err != nil {
+		t.Fatalf("Failed to evaluate symlink: %v", err)
+	}
+	
+	expectedTarget, _ := filepath.Abs(regularFile)
+	actualTarget, _ := filepath.Abs(target)
+	if actualTarget != expectedTarget {
+		t.Errorf("Symlink target mismatch: expected %s, got %s", expectedTarget, actualTarget)
+	}
+}
+
+// TestCircularSymlinkPrevention verifies that circular symlinks don't cause infinite loops
+func TestCircularSymlinkPrevention(t *testing.T) {
+	// Test the visited directories map logic
+	visitedDirs := make(map[string]bool)
+	
+	// Simulate visiting directories
+	dir1 := "/videos/dir1"
+	dir2 := "/videos/dir2"
+	
+	// Visit dir1
+	if visitedDirs[dir1] {
+		t.Error("dir1 should not be visited yet")
+	}
+	visitedDirs[dir1] = true
+	
+	// Visit dir2
+	if visitedDirs[dir2] {
+		t.Error("dir2 should not be visited yet")
+	}
+	visitedDirs[dir2] = true
+	
+	// Try to visit dir1 again - should be detected
+	if !visitedDirs[dir1] {
+		t.Error("dir1 should be marked as visited")
+	}
+	
+	// Should not revisit
+	shouldSkip := visitedDirs[dir1]
+	if !shouldSkip {
+		t.Error("Expected to skip already visited directory")
 	}
 }

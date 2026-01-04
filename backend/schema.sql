@@ -1,8 +1,8 @@
 -- Create videos table
 CREATE TABLE IF NOT EXISTS videos (
     id SERIAL PRIMARY KEY,
-    filename VARCHAR(500) NOT NULL UNIQUE,
-    filepath VARCHAR(1000) NOT NULL,
+    filename VARCHAR(500) NOT NULL,
+    filepath VARCHAR(1000) NOT NULL UNIQUE,
     title VARCHAR(500) NOT NULL,
     views INTEGER DEFAULT 0,
     likes INTEGER DEFAULT 0,
@@ -25,3 +25,4 @@ CREATE TABLE IF NOT EXISTS comments (
 CREATE INDEX IF NOT EXISTS idx_videos_created_at ON videos(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_videos_modified_at ON videos(modified_at DESC);
 CREATE INDEX IF NOT EXISTS idx_comments_video_id ON comments(video_id);
+CREATE INDEX IF NOT EXISTS idx_videos_filepath ON videos(filepath);
