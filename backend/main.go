@@ -42,6 +42,16 @@ type Comment struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Playlist represents a group of related videos
+type Playlist struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	VideoIDs    []int   `json:"video_ids"`
+	VideoCount  int     `json:"video_count"`
+	ThumbnailID int     `json:"thumbnail_id"`
+	Directory   string  `json:"directory"`
+}
+
 // Config holds application configuration
 type Config struct {
 	DatabaseURL string
@@ -110,6 +120,8 @@ func main() {
 	api.HandleFunc("/videos/{id}/like", toggleLike).Methods("POST")
 	api.HandleFunc("/videos/{id}/comments", getComments).Methods("GET")
 	api.HandleFunc("/videos/{id}/comments", addComment).Methods("POST")
+	api.HandleFunc("/playlists", getPlaylists).Methods("GET")
+	api.HandleFunc("/playlists/{id}", getPlaylist).Methods("GET")
 
 	// Setup CORS
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
@@ -722,4 +734,153 @@ func servePlaceholderThumbnail(w http.ResponseWriter) {
 	if _, err := w.Write([]byte(thumbnailPlaceholderSVG)); err != nil {
 		logger.Printf("Error writing placeholder thumbnail: %v", err)
 	}
+}
+
+// normalizePlaylistName removes common variations to group similar videos
+func normalizePlaylistName(filename string) string {
+	// Remove extension
+	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+	
+	// Convert to lowercase for comparison
+	name = strings.ToLower(name)
+	
+	// Remove patterns using simple string operations
+	for _, pattern := range []string{
+		"_v1", "_v2", "_v3", "_v4", "_v5", "_edited", "_final", "_draft",
+		" v1", " v2", " v3", " v4", " v5", " edited", " final", " draft",
+		"(edited)", "(final)", "(draft)", "-edited", "-final", "-draft",
+	} {
+		name = strings.TrimSuffix(name, pattern)
+	}
+	
+	// Remove trailing numbers
+	for i := len(name) - 1; i >= 0; i-- {
+		if name[i] >= '0' && name[i] <= '9' {
+			continue
+		}
+		if name[i] == '_' || name[i] == '-' || name[i] == ' ' {
+			name = name[:i]
+			break
+		}
+		break
+	}
+	
+	// Normalize separators
+	name = strings.ReplaceAll(name, "_", " ")
+	name = strings.ReplaceAll(name, "-", " ")
+	
+	// Trim spaces
+	name = strings.TrimSpace(name)
+	
+	return name
+}
+
+// generatePlaylists groups videos by similar names within the same directory
+func generatePlaylists() []Playlist {
+	rows, err := db.Query(`
+		SELECT id, filename, filepath, title
+		FROM videos
+		ORDER BY filepath
+	`)
+	if err != nil {
+		logger.Printf("Error querying videos for playlists: %v", err)
+		return []Playlist{}
+	}
+	defer rows.Close()
+
+	// Group videos by directory and normalized name
+	type videoInfo struct {
+		ID       int
+		Filename string
+		Filepath string
+		Title    string
+	}
+	
+	var videos []videoInfo
+	for rows.Next() {
+		var v videoInfo
+		if err := rows.Scan(&v.ID, &v.Filename, &v.Filepath, &v.Title); err != nil {
+			logger.Printf("Error scanning video: %v", err)
+			continue
+		}
+		videos = append(videos, v)
+	}
+
+	// Group by directory and normalized name
+	playlistMap := make(map[string][]videoInfo)
+	for _, v := range videos {
+		dir := filepath.Dir(v.Filepath)
+		normalized := normalizePlaylistName(v.Filename)
+		key := dir + "||" + normalized
+		playlistMap[key] = append(playlistMap[key], v)
+	}
+
+	// Create playlists only for groups with more than one video
+	var playlists []Playlist
+	for key, vids := range playlistMap {
+		if len(vids) < 2 {
+			continue
+		}
+
+		parts := strings.Split(key, "||")
+		dir := parts[0]
+		normalized := parts[1]
+
+		// Sort videos alphabetically by filename
+		sortedVids := make([]videoInfo, len(vids))
+		copy(sortedVids, vids)
+		for i := 0; i < len(sortedVids); i++ {
+			for j := i + 1; j < len(sortedVids); j++ {
+				if sortedVids[i].Filename > sortedVids[j].Filename {
+					sortedVids[i], sortedVids[j] = sortedVids[j], sortedVids[i]
+				}
+			}
+		}
+
+		var videoIDs []int
+		for _, v := range sortedVids {
+			videoIDs = append(videoIDs, v.ID)
+		}
+
+		// Use first video's title as playlist name (cleaned up)
+		playlistName := normalized
+		if len(playlistName) > 0 {
+			// Capitalize first letter
+			playlistName = strings.ToUpper(string(playlistName[0])) + playlistName[1:]
+		}
+
+		playlist := Playlist{
+			ID:          fmt.Sprintf("pl_%d", len(playlists)+1),
+			Name:        playlistName,
+			VideoIDs:    videoIDs,
+			VideoCount:  len(videoIDs),
+			ThumbnailID: videoIDs[0],
+			Directory:   dir,
+		}
+		playlists = append(playlists, playlist)
+	}
+
+	return playlists
+}
+
+func getPlaylists(w http.ResponseWriter, r *http.Request) {
+	playlists := generatePlaylists()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(playlists)
+}
+
+func getPlaylist(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	playlistID := vars["id"]
+
+	playlists := generatePlaylists()
+	for _, playlist := range playlists {
+		if playlist.ID == playlistID {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(playlist)
+			return
+		}
+	}
+
+	http.Error(w, "Playlist not found", http.StatusNotFound)
 }

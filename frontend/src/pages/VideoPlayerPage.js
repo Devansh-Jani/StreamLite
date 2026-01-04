@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -14,6 +14,11 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  CardMedia,
+  List,
+  ListItem,
+  ListItemButton,
+  Divider,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -29,12 +34,15 @@ import {
   toggleLike,
   getComments,
   addComment,
+  getPlaylist,
+  getVideos,
 } from '../api';
 import CommentSection from '../components/CommentSection';
 
 const VideoPlayerPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const videoRef = useRef(null);
   const containerRef = useRef(null);
   const [video, setVideo] = useState(null);
@@ -44,6 +52,9 @@ const VideoPlayerPage = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [comments, setComments] = useState([]);
+  const [playlist, setPlaylist] = useState(null);
+  const [playlistVideos, setPlaylistVideos] = useState([]);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
   useEffect(() => {
     const fetchVideo = async () => {
@@ -68,15 +79,58 @@ const VideoPlayerPage = () => {
       }
     };
 
+    const fetchPlaylist = async () => {
+      const playlistId = searchParams.get('playlist');
+      if (playlistId) {
+        try {
+          const playlistData = await getPlaylist(playlistId);
+          setPlaylist(playlistData);
+          
+          // Fetch all videos in the playlist
+          const allVideos = await getVideos();
+          const playlistVids = playlistData.video_ids.map(vidId => 
+            allVideos.find(v => v.id === vidId)
+          ).filter(v => v !== undefined);
+          setPlaylistVideos(playlistVids);
+          
+          // Find current video index in playlist
+          const index = playlistData.video_ids.indexOf(parseInt(id));
+          setCurrentVideoIndex(index);
+        } catch (error) {
+          console.error('Failed to fetch playlist:', error);
+        }
+      }
+    };
+
     fetchVideo();
     fetchComments();
-  }, [id]);
+    fetchPlaylist();
+  }, [id, searchParams]);
 
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = playbackSpeed;
     }
   }, [playbackSpeed]);
+
+  // Handle video ended event for autoplay
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement || !playlist) return;
+
+    const handleVideoEnded = () => {
+      // Check if there's a next video in the playlist
+      if (currentVideoIndex >= 0 && currentVideoIndex < playlist.video_ids.length - 1) {
+        const nextVideoId = playlist.video_ids[currentVideoIndex + 1];
+        navigate(`/video/${nextVideoId}?playlist=${playlist.id}`);
+      }
+    };
+
+    videoElement.addEventListener('ended', handleVideoEnded);
+    return () => {
+      videoElement.removeEventListener('ended', handleVideoEnded);
+    };
+  }, [playlist, currentVideoIndex, navigate]);
 
   const handleLike = async () => {
     try {
@@ -180,6 +234,10 @@ const VideoPlayerPage = () => {
     }
   };
 
+  const handlePlaylistVideoClick = (videoId) => {
+    navigate(`/video/${videoId}?playlist=${playlist.id}`);
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
@@ -219,87 +277,167 @@ const VideoPlayerPage = () => {
           </Typography>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Paper elevation={3} sx={{ mb: 3 }} ref={containerRef}>
-          <Box sx={{ position: 'relative', backgroundColor: '#000', width: '100%', height: isFullscreen ? '100vh' : 'auto' }}>
-            <video
-              ref={videoRef}
-              width="100%"
-              height={isFullscreen ? '100%' : 'auto'}
-              controls
-              src={getVideoStreamUrl(id)}
-              style={{ 
-                display: 'block',
-                objectFit: 'contain',
-                maxHeight: isFullscreen ? '100vh' : '80vh'
-              }}
-            />
-            <Box
-              sx={{
-                position: 'absolute',
-                bottom: 60,
-                right: 10,
-                display: 'flex',
-                gap: 1,
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                borderRadius: 1,
-                padding: 1,
-              }}
-            >
-              <FormControl size="small" sx={{ minWidth: 80 }}>
-                <InputLabel sx={{ color: 'white' }}>Speed</InputLabel>
-                <Select
-                  value={playbackSpeed}
-                  label="Speed"
-                  onChange={(e) => setPlaybackSpeed(e.target.value)}
-                  sx={{
-                    color: 'white',
-                    '.MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
-                    '.MuiSvgIcon-root': { color: 'white' },
-                  }}
-                >
-                  <MenuItem value={0.25}>0.25x</MenuItem>
-                  <MenuItem value={0.5}>0.5x</MenuItem>
-                  <MenuItem value={0.75}>0.75x</MenuItem>
-                  <MenuItem value={1}>1x</MenuItem>
-                  <MenuItem value={1.25}>1.25x</MenuItem>
-                  <MenuItem value={1.5}>1.5x</MenuItem>
-                  <MenuItem value={1.75}>1.75x</MenuItem>
-                  <MenuItem value={2}>2x</MenuItem>
-                  <MenuItem value={2.5}>2.5x</MenuItem>
-                  <MenuItem value={3}>3x</MenuItem>
-                </Select>
-              </FormControl>
-              <IconButton
-                onClick={handleFullscreen}
-                sx={{ color: 'white' }}
-                aria-label="fullscreen"
-              >
-                {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
-              </IconButton>
+      <Box sx={{ backgroundColor: '#000', minHeight: 'calc(100vh - 64px)' }}>
+        {/* Theater Mode Container */}
+        <Container maxWidth="xl" sx={{ pt: 2, pb: 4 }}>
+          <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', lg: 'row' } }}>
+            {/* Main Video Section */}
+            <Box sx={{ flex: playlist ? '0 0 70%' : '1', minWidth: 0 }}>
+              <Paper elevation={3} sx={{ mb: 2, backgroundColor: '#000' }} ref={containerRef}>
+                <Box sx={{ position: 'relative', backgroundColor: '#000', width: '100%', height: isFullscreen ? '100vh' : 'auto' }}>
+                  <video
+                    ref={videoRef}
+                    width="100%"
+                    height={isFullscreen ? '100%' : 'auto'}
+                    controls
+                    src={getVideoStreamUrl(id)}
+                    style={{ 
+                      display: 'block',
+                      objectFit: 'contain',
+                      aspectRatio: '16/9',
+                      maxHeight: isFullscreen ? '100vh' : '70vh'
+                    }}
+                  />
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      bottom: 60,
+                      right: 10,
+                      display: 'flex',
+                      gap: 1,
+                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      borderRadius: 1,
+                      padding: 1,
+                    }}
+                  >
+                    <FormControl size="small" sx={{ minWidth: 80 }}>
+                      <InputLabel sx={{ color: 'white' }}>Speed</InputLabel>
+                      <Select
+                        value={playbackSpeed}
+                        label="Speed"
+                        onChange={(e) => setPlaybackSpeed(e.target.value)}
+                        sx={{
+                          color: 'white',
+                          '.MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
+                          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'white' },
+                          '.MuiSvgIcon-root': { color: 'white' },
+                        }}
+                      >
+                        <MenuItem value={0.25}>0.25x</MenuItem>
+                        <MenuItem value={0.5}>0.5x</MenuItem>
+                        <MenuItem value={0.75}>0.75x</MenuItem>
+                        <MenuItem value={1}>1x</MenuItem>
+                        <MenuItem value={1.25}>1.25x</MenuItem>
+                        <MenuItem value={1.5}>1.5x</MenuItem>
+                        <MenuItem value={1.75}>1.75x</MenuItem>
+                        <MenuItem value={2}>2x</MenuItem>
+                        <MenuItem value={2.5}>2.5x</MenuItem>
+                        <MenuItem value={3}>3x</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <IconButton
+                      onClick={handleFullscreen}
+                      sx={{ color: 'white' }}
+                      aria-label="fullscreen"
+                    >
+                      {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
+                    </IconButton>
+                  </Box>
+                </Box>
+              </Paper>
+              
+              {/* Video Info */}
+              <Paper elevation={3} sx={{ p: 2, mb: 2, backgroundColor: '#1e1e1e', color: 'white' }}>
+                <Typography variant="h5" gutterBottom>
+                  {video?.title}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Typography variant="body2" color="grey.400">
+                    {video?.views} views
+                  </Typography>
+                  <Button
+                    variant={liked ? 'contained' : 'outlined'}
+                    startIcon={liked ? <ThumbUp /> : <ThumbUpOutlined />}
+                    onClick={handleLike}
+                  >
+                    {localLikes}
+                  </Button>
+                </Box>
+              </Paper>
+
+              {/* Comments Section */}
+              <Box sx={{ backgroundColor: '#fff' }}>
+                <CommentSection comments={comments} onAddComment={handleAddComment} />
+              </Box>
             </Box>
+
+            {/* Playlist Sidebar */}
+            {playlist && playlistVideos.length > 0 && (
+              <Box sx={{ flex: '0 0 28%', minWidth: 0 }}>
+                <Paper elevation={3} sx={{ p: 2, backgroundColor: '#1e1e1e', color: 'white', position: 'sticky', top: 16, maxHeight: 'calc(100vh - 100px)', overflow: 'auto' }}>
+                  <Typography variant="h6" gutterBottom>
+                    {playlist.name}
+                  </Typography>
+                  <Typography variant="body2" color="grey.400" sx={{ mb: 2 }}>
+                    {currentVideoIndex + 1} / {playlist.video_count} videos
+                  </Typography>
+                  <Divider sx={{ mb: 2, backgroundColor: 'grey.700' }} />
+                  <List sx={{ p: 0 }}>
+                    {playlistVideos.map((playlistVideo, index) => (
+                      <ListItem key={playlistVideo.id} disablePadding sx={{ mb: 1 }}>
+                        <ListItemButton
+                          onClick={() => handlePlaylistVideoClick(playlistVideo.id)}
+                          selected={playlistVideo.id === parseInt(id)}
+                          sx={{
+                            borderRadius: 1,
+                            backgroundColor: playlistVideo.id === parseInt(id) ? 'primary.main' : 'transparent',
+                            '&:hover': {
+                              backgroundColor: playlistVideo.id === parseInt(id) ? 'primary.dark' : 'rgba(255, 255, 255, 0.08)',
+                            },
+                            p: 1,
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
+                            <Typography variant="body2" sx={{ minWidth: 24, color: 'grey.400' }}>
+                              {index + 1}
+                            </Typography>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <CardMedia
+                                component="img"
+                                image={playlistVideo.thumbnail_url}
+                                alt={playlistVideo.title}
+                                sx={{
+                                  width: '100%',
+                                  aspectRatio: '16/9',
+                                  objectFit: 'cover',
+                                  borderRadius: 1,
+                                  mb: 0.5,
+                                }}
+                              />
+                              <Typography 
+                                variant="body2" 
+                                sx={{ 
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                }}
+                              >
+                                {playlistVideo.title}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </ListItemButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              </Box>
+            )}
           </Box>
-          <Box sx={{ p: 2 }}>
-            <Typography variant="h5" gutterBottom>
-              {video.title}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {video.views} views
-              </Typography>
-              <Button
-                variant={liked ? 'contained' : 'outlined'}
-                startIcon={liked ? <ThumbUp /> : <ThumbUpOutlined />}
-                onClick={handleLike}
-              >
-                {localLikes}
-              </Button>
-            </Box>
-          </Box>
-        </Paper>
-        <CommentSection comments={comments} onAddComment={handleAddComment} />
-      </Container>
+        </Container>
+      </Box>
     </>
   );
 };

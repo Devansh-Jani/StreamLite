@@ -58,3 +58,13 @@ export const addComment = async (id, author, content) => {
   });
   return response.data;
 };
+
+export const getPlaylists = async () => {
+  const response = await axios.get(`${API_BASE_URL}/playlists`);
+  return response.data;
+};
+
+export const getPlaylist = async (id) => {
+  const response = await axios.get(`${API_BASE_URL}/playlists/${id}`);
+  return response.data;
+};
