@@ -6,19 +6,25 @@ StreamLite is a lightweight video streaming platform optimized for low-resource 
 
 ### Backend (Go)
 - **Video Discovery**: Recursively scans a user-specified directory for video files
+- **Playlist Generation**: Automatically groups videos with similar names into playlists
 - **PostgreSQL Database**: Stores video metadata, views, likes, and comments
-- **REST API**: Provides endpoints for video listing, streaming, and interactions
+- **REST API**: Provides endpoints for video listing, streaming, playlists, and interactions
 - **Auto-Generated Metadata**: Creates titles from filenames if metadata is missing
 - **Read-Only Video Files**: No modifications to original video files
 - **Separate Configuration**: Dedicated `config` directory for logs and settings
 
 ### Frontend (React + Material-UI)
-- **Video Grid**: Displays thumbnails, views, and timestamps
+- **Video Grid**: Displays thumbnails in a responsive 3-column layout (adjusts for different screen sizes)
+- **Playlist Support**: Groups related videos into playlists with visual indicators
+- **Theater Mode Player**: Wide, centered video player for optimal viewing experience
 - **Video Player**: Full-featured player with:
+  - Theater mode as default view
   - Expand/Fullscreen mode
-  - Speed adjustment (1x to 3x)
+  - Speed adjustment (0.25x to 3x)
   - Like button
   - Comments section
+- **Playlist Sidebar**: Shows remaining videos in playlist with thumbnails
+- **Autoplay**: Automatically plays next video in playlist when current video ends
 - **Responsive Design**: Works on desktop and mobile devices
 
 ## Project Structure
@@ -104,9 +110,26 @@ npm start
 - `POST /api/videos/:id/view` - Increment view count
 - `POST /api/videos/:id/like` - Toggle like (body: `{"action": "like" | "unlike"}`)
 
+### Playlists
+- `GET /api/playlists` - List all automatically generated playlists
+- `GET /api/playlists/:id` - Get playlist details with video IDs
+
 ### Comments
 - `GET /api/videos/:id/comments` - Get video comments
 - `POST /api/videos/:id/comments` - Add comment (body: `{"author": "Name", "content": "Comment"}`)
+
+## Playlist Generation
+
+StreamLite automatically creates playlists by grouping videos with similar names in the same directory. The grouping logic:
+- Ignores version suffixes (e.g., `_v1`, `_v2`, `-v3`)
+- Ignores editing indicators (e.g., `_edited`, `_final`, `_draft`)
+- Ignores trailing numbers (e.g., `_1`, `_2`, `-3`)
+- Groups videos alphabetically within each playlist
+
+Examples of videos that will be grouped together:
+- `Tutorial_1.mp4`, `Tutorial_2.mp4`, `Tutorial_3.mp4` → "Tutorial" playlist
+- `movie_v1.mp4`, `movie_v2.mp4`, `movie_final.mp4` → "Movie" playlist
+- `episode-1.mp4`, `episode-2.mp4` → "Episode" playlist
 
 ## Configuration
 
