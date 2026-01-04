@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: streamlite-postgres
+    environment:
+      POSTGRES_USER: streamlite
+      POSTGRES_PASSWORD: streamlite
+      POSTGRES_DB: streamlite
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamlite"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: streamlite-backend
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://streamlite:streamlite@postgres:5432/streamlite?sslmode=disable
+      VIDEO_DIR: /videos
+      CONFIG_DIR: /config
+      PORT: 8080
+    volumes:
+      - ./videos:/videos:ro
+      - ./config:/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: streamlite-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
