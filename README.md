@@ -72,7 +72,7 @@ StreamLite/
 
 4. **Access the application**
    - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8080/api
+   - Backend API: http://localhost:8082/api
 
 ## Development Setup
 
@@ -116,11 +116,11 @@ npm start
 - `DATABASE_URL` - PostgreSQL connection string (default: `postgres://streamlite:streamlite@localhost:5432/streamlite?sslmode=disable`)
 - `VIDEO_DIR` - Path to video directory (default: `./videos`)
 - `CONFIG_DIR` - Path to config/logs directory (default: `./config`)
-- `PORT` - Server port (default: `8080`)
+- `PORT` - Server port (default: `8082`)
 - `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (default: `http://localhost:3000,http://localhost:80`)
 
 **Frontend:**
-- `REACT_APP_API_URL` - Backend API URL (default: `http://localhost:8080/api`)
+- `REACT_APP_API_URL` - Backend API URL (default: `http://localhost:8082/api`)
 
 ### Docker Compose
 

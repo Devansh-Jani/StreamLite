@@ -20,17 +20,17 @@ import (
 
 // Video represents a video file
 type Video struct {
-	ID         int       `json:"id"`
-	Filename   string    `json:"filename"`
-	Filepath   string    `json:"filepath"`
-	Title      string    `json:"title"`
-	Views      int       `json:"views"`
-	Likes      int       `json:"likes"`
-	Duration   int       `json:"duration"`
-	FileSize   int64     `json:"file_size"`
-	CreatedAt  time.Time `json:"created_at"`
-	ModifiedAt time.Time `json:"modified_at"`
-	ThumbnailURL string  `json:"thumbnail_url"`
+	ID           int       `json:"id"`
+	Filename     string    `json:"filename"`
+	Filepath     string    `json:"filepath"`
+	Title        string    `json:"title"`
+	Views        int       `json:"views"`
+	Likes        int       `json:"likes"`
+	Duration     int       `json:"duration"`
+	FileSize     int64     `json:"file_size"`
+	CreatedAt    time.Time `json:"created_at"`
+	ModifiedAt   time.Time `json:"modified_at"`
+	ThumbnailURL string    `json:"thumbnail_url"`
 }
 
 // Comment represents a comment on a video
@@ -62,7 +62,7 @@ func main() {
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://streamlite:streamlite@localhost:5432/streamlite?sslmode=disable"),
 		VideoDir:    getEnv("VIDEO_DIR", "./videos"),
 		ConfigDir:   getEnv("CONFIG_DIR", "./config"),
-		Port:        getEnv("PORT", "8080"),
+		Port:        getEnv("PORT", "8082"),
 	}
 
 	// Setup logging
@@ -105,7 +105,7 @@ func main() {
 	if allowedOrigins == "" {
 		allowedOrigins = "http://localhost:3000,http://localhost:80"
 	}
-	
+
 	c := cors.New(cors.Options{
 		AllowedOrigins:   strings.Split(allowedOrigins, ","),
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -124,7 +124,7 @@ func main() {
 
 func setupLogging() {
 	logFile := filepath.Join(config.ConfigDir, "streamlite.log")
-	
+
 	// Create config directory if it doesn't exist
 	if err := os.MkdirAll(config.ConfigDir, 0755); err != nil {
 		log.Fatalf("Failed to create config directory: %v", err)
@@ -147,7 +147,7 @@ func getEnv(key, defaultValue string) string {
 
 func scanVideoDirectory() error {
 	logger.Printf("Scanning video directory: %s", config.VideoDir)
-	
+
 	videoExtensions := map[string]bool{
 		".mp4":  true,
 		".avi":  true,
@@ -198,7 +198,7 @@ func scanVideoDirectory() error {
 			INSERT INTO videos (filename, filepath, title, file_size, modified_at)
 			VALUES ($1, $2, $3, $4, $5)
 		`, filename, path, title, info.Size(), info.ModTime())
-		
+
 		if err != nil {
 			logger.Printf("Error inserting video %s: %v", filename, err)
 			return nil
@@ -326,7 +326,7 @@ func streamVideo(w http.ResponseWriter, r *http.Request) {
 	// Set headers for video streaming
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Accept-Ranges", "bytes")
-	
+
 	// Handle range requests for seeking
 	rangeHeader := r.Header.Get("Range")
 	if rangeHeader != "" {
@@ -347,7 +347,7 @@ func streamVideo(w http.ResponseWriter, r *http.Request) {
 
 		// Seek to start position
 		file.Seek(start, 0)
-		
+
 		// Copy the requested range
 		io.CopyN(w, file, end-start+1)
 	} else {
@@ -446,12 +446,12 @@ func addComment(w http.ResponseWriter, r *http.Request) {
 	// Sanitize and validate input
 	comment.Author = strings.TrimSpace(comment.Author)
 	comment.Content = strings.TrimSpace(comment.Content)
-	
+
 	// Limit author name length
 	if len(comment.Author) > 100 {
 		comment.Author = comment.Author[:100]
 	}
-	
+
 	// Limit content length
 	if len(comment.Content) > 5000 {
 		http.Error(w, "Comment content too long (max 5000 characters)", http.StatusBadRequest)

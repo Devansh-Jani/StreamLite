@@ -23,7 +23,7 @@ WORKDIR /root/
 COPY --from=builder /app/streamlite .
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8082
 
 # Run
 CMD ["./streamlite"]

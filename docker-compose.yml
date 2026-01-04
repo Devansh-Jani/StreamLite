@@ -23,12 +23,12 @@ services:
       dockerfile: Dockerfile
     container_name: streamlite-backend
     ports:
-      - "8080:8080"
+      - "8082:8082"
     environment:
       DATABASE_URL: postgres://streamlite:streamlite@postgres:5432/streamlite?sslmode=disable
       VIDEO_DIR: /videos
       CONFIG_DIR: /config
-      PORT: 8080
+      PORT: 8082
       ALLOWED_ORIGINS: http://localhost:3000,http://localhost:80
     volumes:
       - ./videos:/videos:ro
