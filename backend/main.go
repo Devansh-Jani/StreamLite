@@ -329,7 +329,9 @@ func walkWithSymlinks(root string, visitedDirs map[string]bool, walkFn filepath.
 	realRoot, err := filepath.EvalSymlinks(absRoot)
 	if err != nil {
 		// If we can't resolve the symlink, log and continue with the original path
-		logger.Printf("Warning: Cannot resolve path %s: %v", absRoot, err)
+		if logger != nil {
+			logger.Printf("Warning: Cannot resolve path %s: %v", absRoot, err)
+		}
 		realRoot = absRoot
 	}
 
@@ -349,21 +351,34 @@ func walkWithSymlinks(root string, visitedDirs map[string]bool, walkFn filepath.
 			// Get the target of the symlink
 			targetPath, err := filepath.EvalSymlinks(path)
 			if err != nil {
-				logger.Printf("Warning: Cannot resolve symlink %s: %v", path, err)
+				if logger != nil {
+					logger.Printf("Warning: Cannot resolve symlink %s: %v", path, err)
+				}
 				return nil // Skip this symlink but continue walking
 			}
 
 			// Get info about the target
 			targetInfo, err := os.Stat(targetPath)
 			if err != nil {
-				logger.Printf("Warning: Cannot stat symlink target %s: %v", targetPath, err)
+				if logger != nil {
+					logger.Printf("Warning: Cannot stat symlink target %s: %v", targetPath, err)
+				}
 				return nil // Skip this symlink but continue walking
 			}
 
 			// If target is a directory, recursively walk it
 			if targetInfo.IsDir() {
-				logger.Printf("Following symlink directory: %s -> %s", path, targetPath)
-				return walkWithSymlinks(targetPath, visitedDirs, walkFn)
+				if logger != nil {
+					logger.Printf("Following symlink directory: %s -> %s", path, targetPath)
+				}
+				// Walk the symlinked directory but don't return the error,
+				// allowing filepath.Walk to continue with siblings
+				if err := walkWithSymlinks(targetPath, visitedDirs, walkFn); err != nil {
+					if logger != nil {
+						logger.Printf("Warning: Error walking symlinked directory %s: %v", targetPath, err)
+					}
+				}
+				return nil // Continue walking siblings
 			} else {
 				// If target is a file, call walkFn with the original symlink path
 				// but use the target's info
@@ -704,5 +719,7 @@ func getThumbnail(w http.ResponseWriter, r *http.Request) {
 func servePlaceholderThumbnail(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.Write([]byte(thumbnailPlaceholderSVG))
+	if _, err := w.Write([]byte(thumbnailPlaceholderSVG)); err != nil {
+		logger.Printf("Error writing placeholder thumbnail: %v", err)
+	}
 }
