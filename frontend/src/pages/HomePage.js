@@ -15,39 +15,50 @@ import {
   Tooltip,
   Snackbar,
   Alert,
+  Chip,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { getVideos, refreshVideos } from '../api';
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
+import { getVideos, refreshVideos, getPlaylists } from '../api';
 
 const HomePage = () => {
   const [videos, setVideos] = useState([]);
+  const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchVideos = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getVideos();
-        setVideos(data);
+        const [videosData, playlistsData] = await Promise.all([
+          getVideos(),
+          getPlaylists(),
+        ]);
+        setVideos(videosData);
+        setPlaylists(playlistsData);
       } catch (error) {
-        console.error('Failed to fetch videos:', error);
+        console.error('Failed to fetch data:', error);
         setSnackbar({ open: true, message: 'Failed to load videos', severity: 'error' });
       } finally {
         setLoading(false);
       }
     };
 
-    fetchVideos();
+    fetchData();
   }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await refreshVideos();
-      const data = await getVideos();
-      setVideos(data);
+      const [videosData, playlistsData] = await Promise.all([
+        getVideos(),
+        getPlaylists(),
+      ]);
+      setVideos(videosData);
+      setPlaylists(playlistsData);
       setSnackbar({ open: true, message: 'Videos refreshed successfully', severity: 'success' });
     } catch (error) {
       console.error('Failed to refresh videos:', error);
@@ -63,6 +74,11 @@ const HomePage = () => {
 
   const handleVideoClick = (id) => {
     navigate(`/video/${id}`);
+  };
+
+  const handlePlaylistClick = (playlist) => {
+    // Navigate to the first video with playlist info
+    navigate(`/video/${playlist.video_ids[0]}?playlist=${playlist.id}`);
   };
 
   const formatViews = (views) => {
@@ -113,41 +129,115 @@ const HomePage = () => {
           </Tooltip>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         {loading ? (
           <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
             <CircularProgress />
           </Box>
         ) : (
-          <Grid container spacing={3}>
-            {videos.map((video) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={video.id}>
-                <Card
-                  sx={{ cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column' }}
-                  onClick={() => handleVideoClick(video.id)}
-                >
-                  <CardMedia
-                    component="img"
-                    image={video.thumbnail_url}
-                    alt={video.title}
-                    sx={{
-                      height: 180,
-                      objectFit: 'cover',
-                      backgroundColor: '#000',
-                    }}
-                  />
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography gutterBottom variant="h6" component="div" noWrap>
-                      {video.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatViews(video.views)} views • {formatDate(video.modified_at)}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+          <>
+            {playlists.length > 0 && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: 'bold' }}>
+                  Playlists
+                </Typography>
+                <Grid container spacing={3}>
+                  {playlists.map((playlist) => (
+                    <Grid item xs={12} sm={6} md={4} key={playlist.id}>
+                      <Card
+                        sx={{ 
+                          cursor: 'pointer', 
+                          height: '100%', 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          border: '2px solid',
+                          borderColor: 'primary.main',
+                        }}
+                        onClick={() => handlePlaylistClick(playlist)}
+                      >
+                        <Box sx={{ position: 'relative' }}>
+                          <CardMedia
+                            component="img"
+                            image={`/api/videos/${playlist.thumbnail_id}/thumbnail`}
+                            alt={playlist.name}
+                            sx={{
+                              aspectRatio: '16/9',
+                              objectFit: 'cover',
+                              backgroundColor: '#000',
+                            }}
+                          />
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                              borderRadius: 1,
+                              px: 1,
+                              py: 0.5,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                            }}
+                          >
+                            <PlaylistPlayIcon sx={{ color: 'white', fontSize: 20 }} />
+                            <Typography variant="body2" sx={{ color: 'white', fontWeight: 'bold' }}>
+                              {playlist.video_count}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <CardContent sx={{ flexGrow: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <PlaylistPlayIcon color="primary" />
+                            <Chip label="Playlist" color="primary" size="small" />
+                          </Box>
+                          <Typography gutterBottom variant="h6" component="div">
+                            {playlist.name}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {playlist.video_count} videos
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+
+            <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: 'bold' }}>
+              All Videos
+            </Typography>
+            <Grid container spacing={3}>
+              {videos.map((video) => (
+                <Grid item xs={12} sm={6} md={4} key={video.id}>
+                  <Card
+                    sx={{ cursor: 'pointer', height: '100%', display: 'flex', flexDirection: 'column' }}
+                    onClick={() => handleVideoClick(video.id)}
+                  >
+                    <CardMedia
+                      component="img"
+                      image={video.thumbnail_url}
+                      alt={video.title}
+                      sx={{
+                        aspectRatio: '16/9',
+                        objectFit: 'cover',
+                        backgroundColor: '#000',
+                      }}
+                    />
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography gutterBottom variant="h6" component="div" noWrap>
+                        {video.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {formatViews(video.views)} views • {formatDate(video.modified_at)}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </>
         )}
       </Container>
       <Snackbar 
