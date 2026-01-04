@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -830,16 +833,12 @@ func generatePlaylists() []Playlist {
 		dir := parts[0]
 		normalized := parts[1]
 
-		// Sort videos alphabetically by filename
+		// Sort videos alphabetically by filename using built-in sort
 		sortedVids := make([]videoInfo, len(vids))
 		copy(sortedVids, vids)
-		for i := 0; i < len(sortedVids); i++ {
-			for j := i + 1; j < len(sortedVids); j++ {
-				if sortedVids[i].Filename > sortedVids[j].Filename {
-					sortedVids[i], sortedVids[j] = sortedVids[j], sortedVids[i]
-				}
-			}
-		}
+		sort.Slice(sortedVids, func(i, j int) bool {
+			return sortedVids[i].Filename < sortedVids[j].Filename
+		})
 
 		var videoIDs []int
 		for _, v := range sortedVids {
@@ -853,8 +852,13 @@ func generatePlaylists() []Playlist {
 			playlistName = strings.ToUpper(string(playlistName[0])) + playlistName[1:]
 		}
 
+		// Generate deterministic playlist ID based on directory and normalized name
+		hashInput := dir + "||" + normalized
+		hash := md5.Sum([]byte(hashInput))
+		playlistID := "pl_" + hex.EncodeToString(hash[:])[:12]
+
 		playlist := Playlist{
-			ID:          fmt.Sprintf("pl_%d", len(playlists)+1),
+			ID:          playlistID,
 			Name:        playlistName,
 			VideoIDs:    videoIDs,
 			VideoCount:  len(videoIDs),

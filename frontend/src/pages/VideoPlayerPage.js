@@ -86,7 +86,10 @@ const VideoPlayerPage = () => {
           const playlistData = await getPlaylist(playlistId);
           setPlaylist(playlistData);
           
-          // Fetch all videos in the playlist
+          // Fetch all videos to get details for playlist videos
+          // Note: This could be optimized with a dedicated endpoint that returns
+          // only the videos in a specific playlist, but for now we use the existing
+          // videos endpoint and filter client-side for simplicity
           const allVideos = await getVideos();
           const playlistVids = playlistData.video_ids.map(vidId => 
             allVideos.find(v => v.id === vidId)
