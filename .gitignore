@@ -10,6 +10,7 @@ go.work
 
 # Backend binary
 backend/streamlite
+backend/backend
 
 # Config and logs
 config/*.log

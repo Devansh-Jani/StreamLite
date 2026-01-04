@@ -106,12 +106,19 @@ func main() {
 		allowedOrigins = "*"
 	}
 
-	c := cors.New(cors.Options{
-		AllowedOrigins:   strings.Split(allowedOrigins, ","),
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
-		AllowCredentials: allowedOrigins != "*", // Can't use credentials with wildcard
-	})
+	var c *cors.Cors
+	if allowedOrigins == "*" {
+		// Use AllowAll for wildcard
+		c = cors.AllowAll()
+	} else {
+		// Use specific origins
+		c = cors.New(cors.Options{
+			AllowedOrigins:   strings.Split(allowedOrigins, ","),
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"*"},
+			AllowCredentials: true,
+		})
+	}
 
 	handler := c.Handler(router)
 

@@ -157,6 +157,17 @@ const VideoPlayerPage = () => {
     };
 
     handleOrientationLock();
+
+    // Cleanup: unlock orientation when component unmounts
+    return () => {
+      if (window.screen.orientation && window.screen.orientation.unlock) {
+        try {
+          window.screen.orientation.unlock();
+        } catch (error) {
+          console.log('Orientation unlock cleanup failed:', error);
+        }
+      }
+    };
   }, [isFullscreen]);
 
   const handleAddComment = async (author, content) => {
