@@ -103,15 +103,22 @@ func main() {
 	// Setup CORS
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:3000,http://localhost:80"
+		allowedOrigins = "*"
 	}
 
-	c := cors.New(cors.Options{
-		AllowedOrigins:   strings.Split(allowedOrigins, ","),
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
-		AllowCredentials: true,
-	})
+	var c *cors.Cors
+	if allowedOrigins == "*" {
+		// Use AllowAll for wildcard
+		c = cors.AllowAll()
+	} else {
+		// Use specific origins
+		c = cors.New(cors.Options{
+			AllowedOrigins:   strings.Split(allowedOrigins, ","),
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"*"},
+			AllowCredentials: true,
+		})
+	}
 
 	handler := c.Handler(router)
 
